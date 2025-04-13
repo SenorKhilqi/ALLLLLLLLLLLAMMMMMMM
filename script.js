@@ -186,52 +186,47 @@ function decodeMessage() {
     
     // Extract the binary message from LSB of red channel
     let binaryMessage = '';
-    let extractedChars = '';
-    let foundDelimiter = false;
+    let extractedText = '';
     
-    // Process pixels until we find the delimiter or reach the end
+    // Process pixels to extract the hidden message
     for (let i = 0; i < data.length; i += 4) {
         // Extract LSB from red channel using bitwise AND with 00000001
         const lsb = data[i] & 0x01;
         binaryMessage += lsb;
         
         // Every 8 bits, convert to a character
-        if (binaryMessage.length % 8 === 0 && binaryMessage.length > 0) {
-            const currentChar = binaryToString(binaryMessage.slice(binaryMessage.length - 8));
-            extractedChars += currentChar;
+        if (binaryMessage.length % 8 === 0) {
+            // Convert the last 8 bits to a character
+            const byteStr = binaryMessage.slice(binaryMessage.length - 8);
+            const asciiCode = parseInt(byteStr, 2);
+            const char = String.fromCharCode(asciiCode);
             
-            // Check if we've found the delimiter
-            if (extractedChars.endsWith(delimiter)) {
-                foundDelimiter = true;
-                // Remove the delimiter from the final message
-                const message = extractedChars.slice(0, -delimiter.length);
+            // Add the character to our extracted text
+            extractedText += char;
+            
+            // Check if our extracted text ends with the delimiter
+            if (extractedText.endsWith(delimiter)) {
+                // Found the delimiter! Extract the message without the delimiter
+                const message = extractedText.substring(0, extractedText.length - delimiter.length);
                 decodedMessageOutput.textContent = message;
-                
-                console.log("Message decoded successfully with delimiter found");
+                console.log("Message decoded successfully!");
+                alert('Message successfully decoded!');
                 return;
             }
         }
         
         // Safety check to avoid infinitely long extraction
-        if (binaryMessage.length >= 5000 * 8) { // Higher limit for longer messages
-            if (extractedChars.length > 0) {
-                decodedMessageOutput.textContent = `Partial message (no delimiter found): ${extractedChars}`;
-                alert('Warning: No delimiter found. Showing partial message.');
+        if (i >= data.length - 4) {
+            // Reached the end of the image without finding the delimiter
+            if (extractedText.length > 0) {
+                decodedMessageOutput.textContent = `Partial message (no delimiter found): ${extractedText}`;
+                alert('Warning: No end marker found. The image might not contain a hidden message or the message format is corrupted.');
             } else {
                 decodedMessageOutput.textContent = "No readable message could be decoded.";
                 alert('No hidden message found or message format is corrupted.');
             }
             return;
         }
-    }
-    
-    // If we got here, we processed all pixels but didn't find a delimiter
-    if (extractedChars.length > 0) {
-        decodedMessageOutput.textContent = `Partial message (no delimiter found): ${extractedChars}`;
-        alert('Warning: No delimiter found. Showing the extracted text.');
-    } else {
-        decodedMessageOutput.textContent = "No readable message could be decoded.";
-        alert('No hidden message found or message format is corrupted.');
     }
 }
 
@@ -252,10 +247,14 @@ function handleImageUpload(event) {
     const reader = new FileReader();
     reader.onload = function(e) {
         const img = new Image();
+        
         img.onload = function() {
             // Adjust canvas size to match the uploaded image
             canvas.width = img.width;
             canvas.height = img.height;
+            
+            // Clear canvas before drawing new image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             // Draw the uploaded image on canvas
             ctx.drawImage(img, 0, 0);
@@ -264,6 +263,7 @@ function handleImageUpload(event) {
                 // Get the image data for processing
                 imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 
+                console.log("Image data loaded. Size:", imageData.width, "x", imageData.height);
                 alert('Image uploaded successfully! You can now decode the message.');
             } catch (error) {
                 // Handle CORS errors or other issues
@@ -271,11 +271,19 @@ function handleImageUpload(event) {
                 alert('Error processing the image. The image might be from another domain or corrupted.');
             }
         };
+        
+        // Handle errors in loading the image
+        img.onerror = function() {
+            alert('Error loading the image. The file might be corrupted.');
+        };
+        
         img.src = e.target.result;
     };
+    
     reader.onerror = function() {
         alert('Error reading the file. Please try again.');
     };
+    
     reader.readAsDataURL(file);
 }
 
